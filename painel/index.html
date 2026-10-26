@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Painel das páginas</title>
+<link rel="stylesheet" href="estilo.css">
+<script>
+  // Aplica o tema guardado antes de desenhar a página, para não piscar.
+  try { const t = localStorage.getItem("paginas-tema"); if (t === "dark" || t === "light") document.documentElement.dataset.theme = t; } catch {}
+</script>
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <h1>Painel</h1>
+    <select id="pagina" class="pagina" aria-label="Página" hidden></select>
+    <span class="sp"></span>
+    <span class="coletor" id="coletor"></span>
+    <button class="btn-sec" id="tema" type="button"></button>
+    <button class="btn-sec" id="sair" type="button" hidden>Sair</button>
+  </div>
+</header>
+
+<main class="wrap" id="entrar" hidden>
+  <form class="login" id="form-login">
+    <h2>Entrar no painel</h2>
+    <label for="usuario">E-mail</label>
+    <input id="usuario" type="email" autocomplete="username" required>
+    <label for="senha">Senha</label>
+    <input id="senha" type="password" autocomplete="current-password" required>
+    <button type="submit" class="btn">Entrar</button>
+    <p class="erro" id="erro-login" role="alert"></p>
+  </form>
+</main>
+
+<main class="wrap" id="painel" hidden>
+  <section class="kpis" id="kpis" aria-label="Resumo"></section>
+  <div class="tools">
+    <button class="f" data-p="30" aria-pressed="true">30 dias</button>
+    <button class="f" data-p="tudo" aria-pressed="false">Tudo</button>
+    <span class="div"></span>
+    <button class="f" data-f="todos" aria-pressed="true">Todos</button>
+    <button class="f" data-f="prod" aria-pressed="false">Em produção</button>
+    <button class="f" data-f="fin" aria-pressed="false">Sem publicar</button>
+    <button class="f" data-f="pub" aria-pressed="false">Publicados</button>
+    <button class="f" data-f="sem" aria-pressed="false">Sem cadastro</button>
+    <span class="sp"></span>
+    <span class="count" id="cont"></span>
+    <input id="busca" type="search" placeholder="Buscar título ou ID" aria-label="Buscar">
+  </div>
+  <div id="view"><p class="wait">Carregando…</p></div>
+</main>
+
+<script src="vendor/supabase.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
