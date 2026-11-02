@@ -114,6 +114,7 @@ tr.row[aria-expanded="true"] .car { transform: rotate(90deg); color: var(--accen
 .pill.fin { background: var(--ok-soft); color: var(--ok); }
 .pill.pub { background: var(--accent-soft); color: var(--accent); }
 .pill.sem { background: var(--neutral-soft); color: var(--muted); }
+.pill.desc { background: var(--neutral-soft); color: var(--muted); text-decoration: line-through; }
 tfoot td { font-size: 12px; color: var(--muted); height: 36px; border-bottom: 0; }
 td.rede { padding-block: 6px; min-width: 120px; }
 td.rede .tot { display: block; font-weight: 600; font-size: 14px; }

@@ -129,7 +129,7 @@
       const publicado = [g.ig?.publicado_em, g.tt?.publicado_em].filter(Boolean).sort()[0] ?? null;
       return {
         chave: `${c.pagina}:${c.id}`, pagina: c.pagina, id: c.id, titulo: c.titulo, resp: infoPagina(c.pagina).nome, ig: g.ig, tt: g.tt,
-        sit: publicado ? "pub" : c.etapa === "Finalizado" ? "fin" : "prod",
+        sit: publicado ? "pub" : c.etapa === "Descartado" ? "desc" : c.etapa === "Finalizado" ? "fin" : "prod",
         tipo: g.ig?.tipo ?? g.tt?.tipo ?? c.tipo ?? null, publicado, criado: c.criado_em, finalizado: c.concluido_em,
         drive: c.drive_pasta_id ? "https://drive.google.com/drive/folders/" + c.drive_pasta_id : null,
         legenda: c.legenda || g.ig?.legenda || g.tt?.legenda || "",
@@ -244,7 +244,7 @@
     const val = (r, c) => c === "curt" ? (curt(r) ?? -1) : c === "views" ? (views(r) ?? -1) : c === "publicado" ? (r.publicado ?? "") : c === "chave" ? recente(r) : (r[c] ?? "");
     return linhas
       .filter((r) => periodo === "tudo" || Date.now() - recente(r) <= 30 * 24 * H)
-      .filter((r) => filtro === "todos" || r.sit === filtro)
+      .filter((r) => (filtro === "todos" ? r.sit !== "desc" : r.sit === filtro))
       .filter((r) => !q || r.titulo.toLowerCase().includes(q) || (r.id && rotuloId(r).toLowerCase().includes(q)))
       .sort((a, b) => { const x = val(a, ordem.c), y = val(b, ordem.c); return (x > y ? 1 : x < y ? -1 : 0) * ordem.d; });
   }
@@ -252,7 +252,7 @@
     const on = ordem.c === c, seta = on ? (ordem.d > 0 ? " ↑" : " ↓") : "";
     return `<th class="${cls}" ${on ? `aria-sort="${ordem.d > 0 ? "ascending" : "descending"}"` : ""}><button data-sort="${c}">${label}${seta}</button></th>`;
   }
-  const SIT = { pub: "Publicado", fin: "Sem publicar", prod: "Em produção", sem: "Sem cadastro" };
+  const SIT = { pub: "Publicado", fin: "Sem publicar", prod: "Em produção", desc: "Descartado", sem: "Sem cadastro" };
   const pill = (r) => `<span class="pill ${r.sit}">${SIT[r.sit]}</span>`;
   const heat = (v, max) => (v == null ? 0 : (0.06 + (v / max) * 0.32).toFixed(2));
   const rotuloId = (r) => (r.id ? infoPagina(r.pagina).prefixo + id4(r.id) : "—");
@@ -344,7 +344,7 @@
     const leg = r.legenda ? `<h3>Legenda</h3><div class="cap">${esc(r.legenda)}</div>` : "";
     const vinc = r.sit === "sem" ? `<h3>Ligar a um post</h3><div class="vincular"><select id="vinc-${r.chave}" aria-label="Escolher o post">${dados.conteudos.filter((c) => c.pagina === r.pagina).map((c) => `<option value="${c.id}">${infoPagina(c.pagina).prefixo}${id4(c.id)} – ${esc(c.titulo)}</option>`).join("")}</select><button class="btn" type="button" data-vincular="${r.pubIds.join(",")}" data-x-vinc="${r.chave}">Ligar</button></div>` : "";
     if (!r.ig && !r.tt) {
-      return `<div class="det"><div>${datas}<p class="wait">${r.sit === "fin" ? `Pronto para publicar. Links e números aparecem quando o coletor encontrar [${rotuloId(r)}] na legenda publicada.` : "Em produção. Os números aparecem depois da publicação."}</p></div><div>${leg}</div></div>`;
+      return `<div class="det"><div>${datas}<p class="wait">${r.sit === "fin" ? `Pronto para publicar. Links e números aparecem quando o coletor encontrar [${rotuloId(r)}] na legenda publicada.` : r.sit === "desc" ? "Descartado: não vai ser publicado." : "Em produção. Os números aparecem depois da publicação."}</p></div><div>${leg}</div></div>`;
     }
     const linha = (rot, c) => `<tr><td>${rot}</td><td>${r.ig ? n(r.ig[c]) : "—"}</td><td>${r.tt ? n(r.tt[c]) : "—"}</td></tr>`;
     const mt = `<table class="mt"><thead><tr><th></th><th class="num ig-t">Instagram</th><th class="num tt-t">TikTok</th></tr></thead><tbody>
