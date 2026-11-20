@@ -4,7 +4,7 @@
   --bg: #F7F8FA; --surface: #FFFFFF; --surface-2: #F0F2F5; --line: #E3E6EB; --fg: #1A1F29; --muted: #69707D; --faint: #B9BEC7;
   --accent: #2F5BEA; --accent-soft: #E6ECFD; --on-accent: #FFFFFF;
   --ok: #1F8A4C; --ok-soft: #E3F4EA; --warn: #A15C00; --warn-soft: #FCF0DC; --neutral-soft: #ECEEF2;
-  --ig: #C2570C; --tt: #2563EB; --heat: 101 163 13;
+  --ig: #C2570C; --tt: #2563EB; --yt: #BE123C; --heat: 101 163 13;
   --font-ui: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-num: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
   color-scheme: light;
@@ -13,12 +13,12 @@
   --bg: #0A0F1C; --surface: #121A2E; --surface-2: #18223A; --line: #26314D; --fg: #F4F6FA; --muted: #8A93A6; --faint: #3A4563;
   --accent: #C8FF3D; --accent-soft: #2A3A1E; --on-accent: #0A0F1C;
   --ok: #4CC782; --ok-soft: #173325; --warn: #FFC233; --warn-soft: #3A2E12; --neutral-soft: #1E2840;
-  --ig: #FB923C; --tt: #60A5FA; --heat: 200 255 61; color-scheme: dark; } }
+  --ig: #FB923C; --tt: #60A5FA; --yt: #FB7185; --heat: 200 255 61; color-scheme: dark; } }
 :root[data-theme="dark"] {
   --bg: #0A0F1C; --surface: #121A2E; --surface-2: #18223A; --line: #26314D; --fg: #F4F6FA; --muted: #8A93A6; --faint: #3A4563;
   --accent: #C8FF3D; --accent-soft: #2A3A1E; --on-accent: #0A0F1C;
   --ok: #4CC782; --ok-soft: #173325; --warn: #FFC233; --warn-soft: #3A2E12; --neutral-soft: #1E2840;
-  --ig: #FB923C; --tt: #60A5FA; --heat: 200 255 61; color-scheme: dark; }
+  --ig: #FB923C; --tt: #60A5FA; --yt: #FB7185; --heat: 200 255 61; color-scheme: dark; }
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -29,7 +29,7 @@ a { color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .wrap { max-width: 1600px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 .wait { color: var(--muted); font-size: 12px; }
-.ig-t { color: var(--ig); } .tt-t { color: var(--tt); }
+.ig-t { color: var(--ig); } .tt-t { color: var(--tt); } .yt-t { color: var(--yt); }
 
 .top { position: sticky; top: 0; z-index: 6; background: var(--surface); border-bottom: 1px solid var(--line); padding-top: env(safe-area-inset-top, 0px); }
 .top .wrap { display: flex; align-items: center; gap: 12px; padding-block: 10px; }
@@ -122,7 +122,7 @@ td.rede .cel { display: inline-grid; width: 150px; gap: 3px; vertical-align: mid
 td.rede .bar { display: flex; height: 15px; border-radius: 4px; overflow: hidden; background: var(--line); }
 td.rede .bar i { display: flex; align-items: center; justify-content: center; height: 100%; font-style: normal; font-size: 10px; font-weight: 700; color: var(--bg); }
 td.rede .cel .sub { justify-content: space-between; }
-.ig-b { background: var(--ig); } .tt-b { background: var(--tt); }
+.ig-b { background: var(--ig); } .tt-b { background: var(--tt); } .yt-b { background: var(--yt); }
 td.rede .sub { display: flex; justify-content: flex-end; gap: 10px; font-size: 12px; font-weight: 600; }
 td.rede .d { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 4px; vertical-align: middle; background: currentColor; }
 tfoot td.rede .sub { margin-top: 2px; }

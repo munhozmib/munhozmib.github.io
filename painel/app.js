@@ -32,12 +32,25 @@
     drive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M8.5 3h7l6 10.5-3.5 6h-12L2.5 13.5z"/><path d="M8.5 3l6.5 11.5M15.5 3L9 14.5M2.5 13.5h13M6 19.5l3-5"/></svg>',
     ig: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.2" cy="6.8" r="1" fill="currentColor" stroke="none"/></svg>',
     tt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 3v11.5a3.5 3.5 0 1 1-3.5-3.5"/><path d="M13.5 3c.5 2.6 2.4 4.4 5 4.6"/></svg>',
+    yt: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="2.5" y="5.5" width="19" height="13" rx="4"/><path d="M10 9.5v5l4.5-2.5z" fill="currentColor"/></svg>',
   };
+  // Redes que o coletor lê. "k" é o campo da linha (r.ig, r.tt, r.yt) e o prefixo das cores (--ig, .ig-t, .ig-b).
+  const REDES = [
+    { k: "ig", rede: "instagram", nome: "Instagram" },
+    { k: "tt", rede: "tiktok", nome: "TikTok" },
+    { k: "yt", rede: "youtube", nome: "YouTube" },
+  ];
+  const daRede = (rede) => REDES.find((x) => x.rede === rede);
+  const pubsDe = (r) => REDES.map((x) => r[x.k]).filter(Boolean);
+  // Só aparecem nos totais, barras e colunas as redes que já têm algum post ou seguidor na seleção.
+  let ativas = REDES.slice(0, 2);
+  const pcts = (vals, t) => vals.map((v) => (t ? Math.round(((v ?? 0) / t) * 100) : 0));
+  const dica = (p) => ativas.map((x, i) => `${x.nome} ${p[i]}%`).join(" · ");
   function links(r) {
     const um = (tipo, url, nome) => url
       ? `<a class="ico" href="${esc(url)}" target="_blank" rel="noopener noreferrer" title="Abrir no ${nome}" aria-label="Abrir no ${nome}">${ICO[tipo]}</a>`
       : `<span class="ico off" title="${nome}: ${tipo === "drive" ? "sem pasta" : "ainda não encontrado"}" aria-label="${nome} indisponível">${ICO[tipo]}</span>`;
-    return `<div class="links">${um("drive", r.drive, "Google Drive")}${um("ig", r.ig?.link, "Instagram")}${um("tt", r.tt?.link, "TikTok")}</div>`;
+    return `<div class="links">${um("drive", r.drive, "Google Drive")}${ativas.map((x) => um(x.k, r[x.k]?.link, x.nome)).join("")}</div>`;
   }
 
   // ---------- estado ----------
@@ -108,6 +121,8 @@
       return;
     }
     dados = { paginas: pg.data, conteudos: c.data.filter(daPagina), pubs: p.data.filter(daPagina), seguidores: sg.data.filter(daPagina), mapa: mp.data, execucao: x.data[0] ?? null };
+    ativas = REDES.filter((x) => dados.pubs.some((p) => p.rede === x.rede) || dados.seguidores.some((s) => s.rede === x.rede));
+    if (!ativas.length) ativas = REDES.slice(0, 2);
     seletor();
     montarLinhas();
     render();
@@ -120,29 +135,30 @@
     const porConteudo = new Map();
     for (const p of dados.pubs) if (p.conteudo_id) {
       const g = porConteudo.get(`${p.pagina}:${p.conteudo_id}`) ?? {};
-      if (p.rede === "instagram" && melhor(g.ig, p)) g.ig = p;
-      if (p.rede === "tiktok" && melhor(g.tt, p)) g.tt = p;
+      const x = daRede(p.rede);
+      if (x && melhor(g[x.k], p)) g[x.k] = p;
       porConteudo.set(`${p.pagina}:${p.conteudo_id}`, g);
     }
     linhas = dados.conteudos.map((c) => {
       const g = porConteudo.get(`${c.pagina}:${c.id}`) ?? {};
-      const publicado = [g.ig?.publicado_em, g.tt?.publicado_em].filter(Boolean).sort()[0] ?? null;
+      const ps = pubsDe(g);
+      const publicado = ps.map((p) => p.publicado_em).filter(Boolean).sort()[0] ?? null;
       return {
-        chave: `${c.pagina}:${c.id}`, pagina: c.pagina, id: c.id, titulo: c.titulo, resp: infoPagina(c.pagina).nome, ig: g.ig, tt: g.tt,
+        chave: `${c.pagina}:${c.id}`, pagina: c.pagina, id: c.id, titulo: c.titulo, resp: infoPagina(c.pagina).nome, ig: g.ig, tt: g.tt, yt: g.yt,
         sit: publicado ? "pub" : c.etapa === "Descartado" ? "desc" : c.etapa === "Finalizado" ? "fin" : "prod",
-        tipo: g.ig?.tipo ?? g.tt?.tipo ?? c.tipo ?? null, publicado, criado: c.criado_em, finalizado: c.concluido_em,
+        tipo: ps.map((p) => p.tipo).find(Boolean) ?? c.tipo ?? null, publicado, criado: c.criado_em, finalizado: c.concluido_em,
         drive: c.drive_pasta_id ? "https://drive.google.com/drive/folders/" + c.drive_pasta_id : null,
-        legenda: c.legenda || g.ig?.legenda || g.tt?.legenda || "",
+        legenda: c.legenda || ps.map((p) => p.legenda).find(Boolean) || "",
       };
     });
-    // Sem cadastro: o mesmo post no Instagram e no TikTok vira uma linha só.
+    // Sem cadastro: o mesmo post em várias redes vira uma linha só.
     for (const g of agruparSoltos(dados.pubs.filter((p) => !p.conteudo_id))) {
-      const ig = g.find((p) => p.rede === "instagram") ?? null, tt = g.find((p) => p.rede === "tiktok") ?? null;
-      const base = ig ?? tt;
+      const por = Object.fromEntries(REDES.map((x) => [x.k, g.find((p) => p.rede === x.rede) ?? null]));
+      const ps = pubsDe(por), base = ps[0];
       const primeira = (base.legenda ?? "").split("\n").find((l) => l.trim()) ?? "(sem legenda)";
       linhas.push({
-        chave: "p" + Math.min(...g.map((p) => p.id)), pagina: base.pagina, id: null, pubIds: g.map((p) => p.id), titulo: primeira.slice(0, 90), resp: infoPagina(base.pagina).nome, ig, tt,
-        sit: "sem", tipo: ig?.tipo ?? tt?.tipo, publicado: g.map((p) => p.publicado_em).sort()[0],
+        chave: "p" + Math.min(...g.map((p) => p.id)), pagina: base.pagina, id: null, pubIds: g.map((p) => p.id), titulo: primeira.slice(0, 90), resp: infoPagina(base.pagina).nome, ...por,
+        sit: "sem", tipo: ps.map((p) => p.tipo).find(Boolean), publicado: g.map((p) => p.publicado_em).sort()[0],
         criado: g.map((p) => p.encontrado_em).sort()[0], finalizado: null, drive: null, legenda: base.legenda ?? "",
       });
     }
@@ -157,17 +173,22 @@
       if (usados.has(p.id)) continue;
       usados.add(p.id);
       const x = inicioLegenda(p.legenda);
-      const par = pubs.filter((q) => {
-        const y = inicioLegenda(q.legenda);
-        return !usados.has(q.id) && q.rede !== p.rede && q.pagina === p.pagina && dist(p, q) <= 30 * 60_000 && x.length >= 8 && y.length >= 8 && (x.startsWith(y) || y.startsWith(x));
-      }).sort((a, b) => dist(a, p) - dist(b, p))[0];
-      if (par) usados.add(par.id);
-      grupos.push(par ? [p, par] : [p]);
+      const grupo = [p];
+      // No máximo um par de cada outra rede.
+      for (const outra of REDES) {
+        if (outra.rede === p.rede) continue;
+        const par = pubs.filter((q) => {
+          const y = inicioLegenda(q.legenda);
+          return !usados.has(q.id) && q.rede === outra.rede && q.pagina === p.pagina && dist(p, q) <= 30 * 60_000 && x.length >= 8 && y.length >= 8 && (x.startsWith(y) || y.startsWith(x));
+        }).sort((a, b) => dist(a, p) - dist(b, p))[0];
+        if (par) { usados.add(par.id); grupo.push(par); }
+      }
+      grupos.push(grupo);
     }
     return grupos;
   }
-  const curt = (r) => soma(r.ig?.curtidas, r.tt?.curtidas);
-  const views = (r) => soma(r.ig?.visualizacoes, r.tt?.visualizacoes);
+  const curt = (r) => soma(...pubsDe(r).map((p) => p.curtidas));
+  const views = (r) => soma(...pubsDe(r).map((p) => p.visualizacoes));
   const recente = (r) => Date.parse(r.publicado ?? r.criado);
 
   // ---------- resumo ----------
@@ -192,33 +213,32 @@
       const vistos = new Set(), u = seg(rede).filter((s) => !vistos.has(s.pagina) && vistos.add(s.pagina));
       return u.length ? u.reduce((a, s) => a + (s.seguidores ?? 0), 0) : null;
     };
-    const bloco = (rot, a, b, extra = "") => {
-      const t = soma(a, b), pa = t ? Math.round(((a ?? 0) / t) * 100) : 0;
+    const bloco = (rot, vals, extra = "") => {
+      const t = soma(...vals), p = pcts(vals, t);
       return `<div class="tb"><span>${rot}</span><b>${k(t)}</b>${extra}
-        <span class="bar"><i class="ig-b" style="width:${pa}%"></i><i class="tt-b" style="width:${t ? 100 - pa : 0}%"></i></span>
-        <small><span class="ig-t">${k(a)}</span><span class="tt-t">${k(b)}</span></small></div>`;
+        <span class="bar" title="${dica(p)}">${ativas.map((x, i) => `<i class="${x.k}-b" style="width:${p[i]}%"></i>`).join("")}</span>
+        <small>${ativas.map((x, i) => `<span class="${x.k}-t">${k(vals[i])}</span>`).join("")}</small></div>`;
     };
-    const si = seg("instagram"), st = seg("tiktok"), todos = [...si, ...st];
-    const desde = todos.map((s) => s.data).sort()[0];
+    const desde = ativas.flatMap((x) => seg(x.rede)).map((s) => s.data).sort()[0];
     const ganho = (l) => [...new Set(l.map((s) => s.pagina))].reduce((a, x) => {
       const q = l.filter((s) => s.pagina === x);
       return a + (q[0].seguidores ?? 0) - (q.at(-1).seguidores ?? 0);
     }, 0);
-    const g = ganho(si) + ganho(st);
-    return bloco("Visualizações <i>total</i>", somaRede("instagram", "visualizacoes"), somaRede("tiktok", "visualizacoes"))
-      + bloco("Curtidas <i>total</i>", somaRede("instagram", "curtidas"), somaRede("tiktok", "curtidas"))
-      + bloco("Seguidores", atual("instagram"), atual("tiktok"), desde ? `<em class="gain">${g >= 0 ? "+" : ""}${n(g)} desde ${dt(desde + "T12:00:00Z", false)}</em>` : "");
+    const g = ativas.reduce((a, x) => a + ganho(seg(x.rede)), 0);
+    return bloco("Visualizações <i>total</i>", ativas.map((x) => somaRede(x.rede, "visualizacoes")))
+      + bloco("Curtidas <i>total</i>", ativas.map((x) => somaRede(x.rede, "curtidas")))
+      + bloco("Seguidores", ativas.map((x) => atual(x.rede)), desde ? `<em class="gain">${g >= 0 ? "+" : ""}${n(g)} desde ${dt(desde + "T12:00:00Z", false)}</em>` : "");
   }
   function topPosts() {
     const L = linhas.filter((r) => r.publicado && views(r) && (topPeriodo === "tudo" || Date.now() - Date.parse(r.publicado) <= 7 * 24 * H))
       .sort((a, b) => views(b) - views(a)).slice(0, 5);
     if (!L.length) return '<p class="wait">Nenhum post publicado no período.</p>';
     return `<ol class="top5">${L.map((r) => {
-      const a = r.ig?.visualizacoes ?? 0, b = r.tt?.visualizacoes ?? 0, pa = Math.round((a / (a + b)) * 100);
-      const ganhou = a >= b ? '<span class="ig-t">Instagram</span>' : '<span class="tt-t">TikTok</span>';
+      const vals = ativas.map((x) => r[x.k]?.visualizacoes ?? 0), t = vals.reduce((a, v) => a + v, 0), p = pcts(vals, t);
+      const i = vals.indexOf(Math.max(...vals)), ganhou = `<span class="${ativas[i].k}-t">${ativas[i].nome}</span>`;
       return `<li><div class="t5"><b title="${esc(r.titulo)}">${esc(r.titulo)}</b><small>${dt(r.publicado, false)} · mais views no ${ganhou}</small></div>
-        <div class="t5b"><span class="bar" title="Instagram ${pa}% · TikTok ${100 - pa}%"><i class="ig-b" style="width:${pa}%"></i><i class="tt-b" style="width:${100 - pa}%"></i></span><small><span class="ig-t">${k(a)}</span><span class="tt-t">${k(b)}</span></small></div>
-        <b class="t5n">${k(a + b)}</b></li>`;
+        <div class="t5b"><span class="bar" title="${dica(p)}">${ativas.map((x, j) => `<i class="${x.k}-b" style="width:${p[j]}%"></i>`).join("")}</span><small>${ativas.map((x, j) => `<span class="${x.k}-t">${k(vals[j])}</span>`).join("")}</small></div>
+        <b class="t5n">${k(t)}</b></li>`;
     }).join("")}</ol>`;
   }
   function mapaHoras() {
@@ -258,18 +278,18 @@
   const rotuloId = (r) => (r.id ? infoPagina(r.pagina).prefixo + id4(r.id) : "—");
   // Total em destaque; embaixo, quanto veio de cada rede (com barrinha de proporção nas visualizações).
   function porRede(r, campo, fmt, barra) {
-    const a = r.ig?.[campo] ?? null, b = r.tt?.[campo] ?? null, t = soma(a, b);
+    const vals = ativas.map((x) => r[x.k]?.[campo] ?? null), t = soma(...vals);
     if (t == null) return "—";
-    const um = (rede, v) => `<span class="${rede}-t"><i class="d"></i>${v == null ? "—" : fmt(v)}</span>`;
-    if (!barra || t === 0) return `<b class="tot">${fmt(t)}</b><span class="sub">${um("ig", a)}${um("tt", b)}</span>`;
-    // Barrinha com a participação de cada rede escrita dentro; o número do Instagram fica na ponta esquerda e o do TikTok na direita.
-    const pa = Math.round(((a ?? 0) / t) * 100), pb = 100 - pa;
+    const subs = `<span class="sub">${ativas.map((x, i) => `<span class="${x.k}-t"><i class="d"></i>${vals[i] == null ? "—" : fmt(vals[i])}</span>`).join("")}</span>`;
+    if (!barra || t === 0) return `<b class="tot">${fmt(t)}</b>${subs}`;
+    // Barrinha com a participação de cada rede escrita dentro; embaixo, o número de cada rede na mesma ordem.
+    const p = pcts(vals, t);
     const seg = (rede, pct) => (pct ? `<i class="${rede}-b" style="width:${pct}%">${pct >= 15 ? pct + "%" : ""}</i>` : "");
-    return `<span class="cel"><b class="tot">${fmt(t)}</b><span class="bar" title="Instagram ${pa}% · TikTok ${pb}%">${seg("ig", pa)}${seg("tt", pb)}</span><span class="sub">${um("ig", a)}${um("tt", b)}</span></span>`;
+    return `<span class="cel"><b class="tot">${fmt(t)}</b><span class="bar" title="${dica(p)}">${ativas.map((x, i) => seg(x.k, p[i])).join("")}</span>${subs}</span>`;
   }
   const totRede = (L, campo, fmt) => {
-    const a = L.reduce((x, r) => x + (r.ig?.[campo] ?? 0), 0), b = L.reduce((x, r) => x + (r.tt?.[campo] ?? 0), 0);
-    return `${fmt(a + b)}<span class="sub"><span class="ig-t"><i class="d"></i>${fmt(a)}</span><span class="tt-t"><i class="d"></i>${fmt(b)}</span></span>`;
+    const vals = ativas.map((x) => L.reduce((a, r) => a + (r[x.k]?.[campo] ?? 0), 0));
+    return `${fmt(vals.reduce((a, v) => a + v, 0))}<span class="sub">${ativas.map((x, i) => `<span class="${x.k}-t"><i class="d"></i>${fmt(vals[i])}</span>`).join("")}</span>`;
   };
 
   function render() {
@@ -291,13 +311,13 @@
       <tbody>${corpo || `<tr><td colspan="${cols}" class="wait">Nenhum post neste filtro.</td></tr>`}</tbody>
       <tfoot><tr><td colspan="7">${L.length} posts · ${pl.length} com números</td><td class="num rede">${totRede(pl, "visualizacoes", k)}</td><td class="num rede">${totRede(pl, "curtidas", n)}</td><td></td></tr></tfoot></table></div>`;
     const cel = `<div class="mlist">${L.map((r) => `<div class="mi"><button class="mi-h" data-x="${r.chave}" aria-expanded="${abertos.has(r.chave)}"><div class="r"><span>${rotuloId(r)} · ${esc(r.tipo ?? "—")} · ${esc(r.resp)}</span>${pill(r)}</div><b>${esc(r.titulo)}</b>
-      ${curt(r) != null ? `<div class="nums"><span style="--h:${heat(views(r), maxV)}">▶ ${k(views(r))} <small class="ig-t">${k(r.ig?.visualizacoes)}</small> <small class="tt-t">${k(r.tt?.visualizacoes)}</small></span><span style="--h:${heat(views(r), maxV)}">♥ ${k(curt(r))} <small class="ig-t">${k(r.ig?.curtidas)}</small> <small class="tt-t">${k(r.tt?.curtidas)}</small></span></div>` : ""}</button>${links(r)}${abertos.has(r.chave) ? detalhe(r) : ""}</div>`).join("") || '<p class="wait">Nenhum post neste filtro.</p>'}</div>`;
+      ${curt(r) != null ? `<div class="nums"><span style="--h:${heat(views(r), maxV)}">▶ ${k(views(r))} ${ativas.map((x) => `<small class="${x.k}-t">${k(r[x.k]?.visualizacoes)}</small>`).join(" ")}</span><span style="--h:${heat(views(r), maxV)}">♥ ${k(curt(r))} ${ativas.map((x) => `<small class="${x.k}-t">${k(r[x.k]?.curtidas)}</small>`).join(" ")}</span></div>` : ""}</button>${links(r)}${abertos.has(r.chave) ? detalhe(r) : ""}</div>`).join("") || '<p class="wait">Nenhum post neste filtro.</p>'}</div>`;
     $("#view").innerHTML = tabela + cel;
   }
 
   // ---------- detalhe ----------
   function curva(r) {
-    const pubs = [r.ig, r.tt].filter(Boolean);
+    const pubs = pubsDe(r);
     if (pubs.some((p) => !series.has(p.id))) return '<p class="wait">Carregando a curva…</p>';
     const pontos = pubs.map((p) => ({ rede: p.rede, pts: series.get(p.id).filter((l) => l.visualizacoes != null).map((l) => ({ h: (Date.parse(l.lido_em) - Date.parse(p.publicado_em)) / H, v: l.visualizacoes })) }));
     const todos = pontos.flatMap((s) => s.pts);
@@ -319,42 +339,43 @@
     let g = marcas.map((h) => `<line x1="${x(h)}" x2="${x(h)}" y1="${T - 6}" y2="${A - B}" stroke="var(--line)" stroke-opacity=".5"/>`).join("");
     g += [0, 0.5, 1].map((f) => `<line x1="${E}" x2="${W - D}" y1="${y(maxV * f)}" y2="${y(maxV * f)}" stroke="var(--line)"/><text x="${E - 6}" y="${y(maxV * f) + 4}" text-anchor="end" font-size="10" fill="var(--muted)">${k(Math.round(maxV * f))}</text>`).join("");
     g += marcas.map((h) => `<text x="${x(h)}" y="${A - 12}" text-anchor="middle" font-size="9" fill="var(--muted)">${rot(h)}</text>`).join("");
-    // Placar em cima de cada marca: quantas vezes a rede da frente tinha a outra, com a leitura mais próxima daquela marca.
+    // Placar em cima de cada marca (quando há duas redes): quantas vezes a rede da frente tinha a outra, com a leitura mais próxima daquela marca.
     const perto = (pts, h) => pts.filter((p) => Math.abs(p.h - h) <= passoH / 2).sort((p, q) => Math.abs(p.h - h) - Math.abs(q.h - h))[0];
-    const ig = pontos.find((s) => s.rede === "instagram"), tt = pontos.find((s) => s.rede === "tiktok");
-    if (ig && tt) g += marcas.map((h) => {
-      const a = perto(ig.pts, h), b = perto(tt.pts, h);
+    const cor = (rede) => `var(--${daRede(rede).k})`;
+    const [s1, s2] = pontos;
+    if (pontos.length === 2) g += marcas.map((h) => {
+      const a = perto(s1.pts, h), b = perto(s2.pts, h);
       if (!h || !a || !b || !a.v || !b.v) return "";
-      const m = Math.max(a.v, b.v) / Math.min(a.v, b.v), cor = a.v === b.v ? "var(--muted)" : a.v > b.v ? "var(--ig)" : "var(--tt)";
-      return `<text x="${x(h)}" y="${T - 12}" text-anchor="middle" font-size="9" font-weight="700" fill="${cor}">${m.toLocaleString("pt-BR", { maximumFractionDigits: m < 10 ? 1 : 0 })}×</text>`;
+      const m = Math.max(a.v, b.v) / Math.min(a.v, b.v), c = a.v === b.v ? "var(--muted)" : a.v > b.v ? cor(s1.rede) : cor(s2.rede);
+      return `<text x="${x(h)}" y="${T - 12}" text-anchor="middle" font-size="9" font-weight="700" fill="${c}">${m.toLocaleString("pt-BR", { maximumFractionDigits: m < 10 ? 1 : 0 })}×</text>`;
     }).join("");
     for (const s of pontos) {
       if (!s.pts.length) continue;
-      const cor = s.rede === "instagram" ? "var(--ig)" : "var(--tt)";
-      g += `<polyline fill="none" stroke="${cor}" stroke-width="1.25" stroke-linejoin="round" points="${s.pts.map((p) => `${x(p.h).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ")}"/>`;
+      const cs = cor(s.rede);
+      g += `<polyline fill="none" stroke="${cs}" stroke-width="1.25" stroke-linejoin="round" points="${s.pts.map((p) => `${x(p.h).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ")}"/>`;
       const raio = s.pts.length > 40 ? 2 : 3.5; // com muitos pontos (janelas longas) a bolinha diminui para a linha aparecer
-      g += s.pts.map((p) => `<circle cx="${x(p.h).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="${raio}" fill="${cor}" stroke="var(--surface)" stroke-width="${raio / 2.5}"><title>${dt(new Date(Date.parse(r.publicado ?? 0) + p.h * H).toISOString())}: ${n(p.v)}</title></circle>`).join("");
+      g += s.pts.map((p) => `<circle cx="${x(p.h).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="${raio}" fill="${cs}" stroke="var(--surface)" stroke-width="${raio / 2.5}"><title>${dt(new Date(Date.parse(r.publicado ?? 0) + p.h * H).toISOString())}: ${n(p.v)}</title></circle>`).join("");
     }
     return `${botoes}<svg class="chart" viewBox="0 0 ${W} ${A}" role="img" aria-label="Visualizações ao longo do tempo">${g}</svg>
-      <div class="legend">${pontos.map((s) => `<span><i style="background:var(--${s.rede === "instagram" ? "ig" : "tt"})"></i>${s.rede === "instagram" ? "Instagram" : "TikTok"}</span>`).join("")}<span>tempo desde a publicação</span></div>`;
+      <div class="legend">${pontos.map((s) => `<span><i style="background:${cor(s.rede)}"></i>${daRede(s.rede).nome}</span>`).join("")}<span>tempo desde a publicação</span></div>`;
   }
 
   function detalhe(r) {
-    const datas = `<dl><dt>Criado</dt><dd>${dt(r.criado)}</dd><dt>Finalizado</dt><dd>${dt(r.finalizado)}</dd><dt>Publicado</dt><dd>${dt(r.publicado)}</dd><dt>Última coleta</dt><dd>${dt([r.ig?.ultima_leitura_em, r.tt?.ultima_leitura_em].filter(Boolean).sort().at(-1))}</dd></dl>`;
+    const datas = `<dl><dt>Criado</dt><dd>${dt(r.criado)}</dd><dt>Finalizado</dt><dd>${dt(r.finalizado)}</dd><dt>Publicado</dt><dd>${dt(r.publicado)}</dd><dt>Última coleta</dt><dd>${dt(pubsDe(r).map((p) => p.ultima_leitura_em).filter(Boolean).sort().at(-1))}</dd></dl>`;
     const leg = r.legenda ? `<h3>Legenda</h3><div class="cap">${esc(r.legenda)}</div>` : "";
     const vinc = r.sit === "sem" ? `<h3>Ligar a um post</h3><div class="vincular"><select id="vinc-${r.chave}" aria-label="Escolher o post">${dados.conteudos.filter((c) => c.pagina === r.pagina).map((c) => `<option value="${c.id}">${infoPagina(c.pagina).prefixo}${id4(c.id)} – ${esc(c.titulo)}</option>`).join("")}</select><button class="btn" type="button" data-vincular="${r.pubIds.join(",")}" data-x-vinc="${r.chave}">Ligar</button></div>` : "";
-    if (!r.ig && !r.tt) {
+    if (!pubsDe(r).length) {
       return `<div class="det"><div>${datas}<p class="wait">${r.sit === "fin" ? `Pronto para publicar. Links e números aparecem quando o coletor encontrar [${rotuloId(r)}] na legenda publicada.` : r.sit === "desc" ? "Descartado: não vai ser publicado." : "Em produção. Os números aparecem depois da publicação."}</p></div><div>${leg}</div></div>`;
     }
-    const linha = (rot, c) => `<tr><td>${rot}</td><td>${r.ig ? n(r.ig[c]) : "—"}</td><td>${r.tt ? n(r.tt[c]) : "—"}</td></tr>`;
-    const mt = `<table class="mt"><thead><tr><th></th><th class="num ig-t">Instagram</th><th class="num tt-t">TikTok</th></tr></thead><tbody>
+    const linha = (rot, c) => `<tr><td>${rot}</td>${ativas.map((x) => `<td>${r[x.k] ? n(r[x.k][c]) : "—"}</td>`).join("")}</tr>`;
+    const mt = `<table class="mt"><thead><tr><th></th>${ativas.map((x) => `<th class="num ${x.k}-t">${x.nome}</th>`).join("")}</tr></thead><tbody>
       ${linha("Visualizações", "visualizacoes")}${linha("Curtidas", "curtidas")}${linha("Comentários", "comentarios")}${linha("Compartilhamentos", "compartilhamentos")}${linha("Salvamentos", "salvamentos")}${linha("Alcance", "alcance")}</tbody></table>`;
     return `<div class="det"><div>${datas}<h3>Visualizações ao longo do tempo</h3>${curva(r)}</div>
       <div>${mt}${vinc}${leg}</div></div>`;
   }
 
   async function carregarSerie(r) {
-    const faltam = [r.ig, r.tt].filter((p) => p && !series.has(p.id)).map((p) => p.id);
+    const faltam = pubsDe(r).filter((p) => !series.has(p.id)).map((p) => p.id);
     if (!faltam.length) return;
     const { data, error } = await db.from("leituras").select("publicacao_id,lido_em,visualizacoes").in("publicacao_id", faltam).eq("situacao", "valida").order("lido_em");
     if (error) return;
