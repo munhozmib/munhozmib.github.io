@@ -70,3 +70,8 @@ class SettingsRepository(private val context: Context) {
         }
     }
 }
+
+/** Rascunho passado do navegador para o editor quando a leitura automática falha. */
+object Drafts {
+    @Volatile var pending: Song? = null
+}

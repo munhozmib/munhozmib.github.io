@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -24,7 +25,8 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.Button
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -59,6 +61,9 @@ import io.github.munhozmib.cifrario.container
 import io.github.munhozmib.cifrario.data.Playlist
 import io.github.munhozmib.cifrario.data.Song
 import io.github.munhozmib.cifrario.importer.ChordPageParser
+import io.github.munhozmib.cifrario.importer.PageSnapshot
+import io.github.munhozmib.cifrario.importer.SnapshotParser
+import io.github.munhozmib.cifrario.data.Drafts
 import io.github.munhozmib.cifrario.importer.ParseException
 import io.github.munhozmib.cifrario.importer.ParsedSong
 import io.github.munhozmib.cifrario.importer.Site
@@ -69,13 +74,13 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonPrimitive
 
-/** Pede o HTML renderizado da página (após o JavaScript do site rodar). */
-private const val GET_HTML = "(function(){return document.documentElement.outerHTML;})()"
+
+private val json = Json { ignoreUnknownKeys = true }
 
 @SuppressLint("SetJavaScriptEnabled")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun BrowserScreen(startUrl: String, back: () -> Unit, openSong: (Long) -> Unit) {
+fun BrowserScreen(startUrl: String, back: () -> Unit, openSong: (Long) -> Unit, openDraft: () -> Unit = {}) {
     val context = LocalContext.current
     val repo = context.container.repository
     val scope = rememberCoroutineScope()
@@ -92,21 +97,26 @@ fun BrowserScreen(startUrl: String, back: () -> Unit, openSong: (Long) -> Unit) 
 
     BackHandler(enabled = canGoBack) { webView?.goBack() }
 
+    var failure by remember { mutableStateOf<Pair<String, PageSnapshot?>?>(null) }
+
     fun extract() {
         val wv = webView ?: return
         extracting = true
-        wv.evaluateJavascript(GET_HTML) { raw ->
+        wv.evaluateJavascript(SnapshotParser.SCRIPT) { raw ->
             scope.launch {
+                var snapshot: PageSnapshot? = null
                 try {
-                    val html = Json.parseToJsonElement(raw).jsonPrimitive.content
-                    val parsed = withContext(Dispatchers.Default) { ChordPageParser.parse(html, wv.url ?: currentUrl) }
+                    // evaluateJavascript devolve a string JSON "embrulhada" em outra string JSON.
+                    val jsonText = json.parseToJsonElement(raw).jsonPrimitive.content
+                    snapshot = json.decodeFromString(PageSnapshot.serializer(), jsonText)
+                    val parsed = withContext(Dispatchers.Default) { SnapshotParser.parse(snapshot) }
                     existing = repo.findByUrl(parsed.url)
                     playlists = repo.allPlaylists()
                     preview = parsed
                 } catch (e: ParseException) {
-                    snackbar.showSnackbar(e.message ?: "Não foi possível ler a cifra.")
+                    failure = (e.message ?: "Não reconheci a cifra.") to snapshot
                 } catch (e: Exception) {
-                    snackbar.showSnackbar("Não foi possível ler a cifra desta página.")
+                    failure = "Não consegui ler esta página (${e.javaClass.simpleName}: ${e.message?.take(120)})." to snapshot
                 } finally {
                     extracting = false
                 }
@@ -133,12 +143,17 @@ fun BrowserScreen(startUrl: String, back: () -> Unit, openSong: (Long) -> Unit) 
                 if (progress in 1..99 || extracting) LinearProgressIndicator(progress = { if (extracting) 1f else progress / 100f }, modifier = Modifier.fillMaxWidth())
             }
         },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { if (!extracting) extract() },
-                icon = { Icon(Icons.Filled.DownloadForOffline, null) },
-                text = { Text(if (extracting) "Lendo…" else "Salvar cifra") },
-            )
+        // Barra fixa embaixo: a página fica acima dela, sem nada cobrindo os botões do site.
+        bottomBar = {
+            Surface(tonalElevation = 3.dp, shadowElevation = 6.dp) {
+                Button(
+                    onClick = { if (!extracting) extract() },
+                    modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    Icon(Icons.Filled.DownloadForOffline, null)
+                    Text(if (extracting) "  Lendo…" else "  Salvar esta cifra")
+                }
+            }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { pad ->
@@ -185,6 +200,34 @@ fun BrowserScreen(startUrl: String, back: () -> Unit, openSong: (Long) -> Unit) 
                 onRelease = { it.destroy() },
             )
         }
+    }
+
+    failure?.let { (msg, snap) ->
+        AlertDialog(
+            onDismissRequest = { failure = null },
+            title = { Text("Não reconheci a cifra") },
+            text = {
+                Text(
+                    "$msg\n\nVocê pode abrir o texto da página no editor, apagar o que não for cifra e salvar." +
+                        "\n\nSe acontecer sempre neste site, me avise qual música era para eu ajustar o leitor."
+                )
+            },
+            confirmButton = {
+                if (snap != null) TextButton(onClick = {
+                    failure = null
+                    val site = Site.fromUrl(snap.url)
+                    val (t, a) = ChordPageParser.splitTitle(snap.ogTitle.ifBlank { snap.title })
+                    Drafts.pending = Song(
+                        title = t, artist = a, sourceSite = site?.label, sourceUrl = snap.url.substringBefore('#'),
+                        content = ChordPageParser.clean(
+                            SnapshotParser.trimToSheet(ChordPageParser.clean(snap.body)) ?: snap.body.take(20000)
+                        ),
+                    )
+                    openDraft()
+                }) { Text("Abrir no editor") }
+            },
+            dismissButton = { TextButton(onClick = { failure = null }) { Text("Fechar") } },
+        )
     }
 
     preview?.let { p ->

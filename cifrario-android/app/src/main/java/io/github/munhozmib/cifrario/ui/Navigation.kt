@@ -19,7 +19,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class PlaylistRoute(val id: Long)
 @Serializable data class ViewerRoute(val songId: Long, val playlistId: Long = -1)
 @Serializable data class BrowserRoute(val url: String, val playlistId: Long = -1)
-@Serializable data class EditorRoute(val songId: Long = 0)
+@Serializable data class EditorRoute(val songId: Long = 0, val draft: Boolean = false)
 @Serializable object SettingsRoute
 
 @Composable
@@ -65,11 +65,12 @@ fun CifrarioNavHost(sharedUrl: String? = null) {
                 startUrl = r.url,
                 back = { nav.popBackStack() },
                 openSong = { id -> nav.navigate(ViewerRoute(id)) },
+                openDraft = { nav.navigate(EditorRoute(draft = true)) },
             )
         }
         composable<EditorRoute> {
             val r = it.toRoute<EditorRoute>()
-            EditorScreen(songId = r.songId, done = { nav.popBackStack() })
+            EditorScreen(songId = r.songId, draft = r.draft, done = { nav.popBackStack() })
         }
         composable<SettingsRoute> { SettingsScreen(back = { nav.popBackStack() }) }
     }

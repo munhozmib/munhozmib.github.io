@@ -37,13 +37,14 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import io.github.munhozmib.cifrario.container
+import io.github.munhozmib.cifrario.data.Drafts
 import io.github.munhozmib.cifrario.data.Song
 import io.github.munhozmib.cifrario.music.ChordSheet
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditorScreen(songId: Long, done: () -> Unit) {
+fun EditorScreen(songId: Long, done: () -> Unit, draft: Boolean = false) {
     val repo = LocalContext.current.container.repository
     val scope = rememberCoroutineScope()
     var original by remember { mutableStateOf<Song?>(null) }
@@ -55,7 +56,8 @@ fun EditorScreen(songId: Long, done: () -> Unit) {
     var content by remember { mutableStateOf("") }
 
     LaunchedEffect(songId) {
-        if (songId > 0) repo.getSong(songId)?.let { s ->
+        val source = if (draft) Drafts.pending.also { Drafts.pending = null } else if (songId > 0) repo.getSong(songId) else null
+        source?.let { s ->
             original = s; title = s.title; artist = s.artist; key = s.originalKey.orEmpty()
             capo = if (s.capo > 0) s.capo.toString() else ""; notes = s.notes.orEmpty(); content = s.content
         }
@@ -77,7 +79,7 @@ fun EditorScreen(songId: Long, done: () -> Unit) {
         topBar = {
             TopAppBar(
                 navigationIcon = { IconButton(onClick = done) { Icon(Icons.Filled.Close, "Cancelar") } },
-                title = { Text(if (songId > 0) "Editar cifra" else "Nova cifra") },
+                title = { Text(if (songId > 0) "Editar cifra" else if (draft) "Revisar e salvar" else "Nova cifra") },
                 actions = { IconButton(onClick = { save() }, enabled = content.isNotBlank() || title.isNotBlank()) { Icon(Icons.Filled.Check, "Salvar") } },
             )
         },

@@ -63,13 +63,18 @@ object ChordPageParser {
 
     private fun parseUltimateGuitar(doc: Document, url: String): ParsedSong? {
         val raw = doc.selectFirst("div.js-store")?.attr("data-content")?.takeIf { it.isNotBlank() } ?: return null
+        return fromUltimateGuitarJson(raw, url, titleArtistFromMeta(doc))
+    }
+
+    /** Lê o JSON que o Ultimate Guitar embute na página (atributo data-content de div.js-store). */
+    fun fromUltimateGuitarJson(raw: String, url: String, fallback: Pair<String, String>): ParsedSong? {
         val root = runCatching { json.parseToJsonElement(raw) }.getOrNull() ?: return null
         val data = root.path("store", "page", "data") ?: return null
         val content = data.path("tab_view", "wiki_tab", "content")?.str() ?: return null
         val tab = data.path("tab")
         return ParsedSong(
-            title = tab?.path("song_name")?.str() ?: titleArtistFromMeta(doc).first,
-            artist = tab?.path("artist_name")?.str() ?: titleArtistFromMeta(doc).second,
+            title = tab?.path("song_name")?.str() ?: fallback.first,
+            artist = tab?.path("artist_name")?.str() ?: fallback.second,
             content = clean(ugMarkupToText(content)),
             key = tab?.path("tonality_name")?.str()?.takeIf { it.isNotBlank() },
             site = Site.ULTIMATE_GUITAR,
@@ -153,7 +158,7 @@ object ChordPageParser {
         }
     }
 
-    private fun stripKind(s: String) =
+    fun stripKind(s: String) =
         s.replace(Regex("(?i)\\s*[(\\[]?\\b(cifra|cifras|chords|tab|tabs|acordes|simplificada|para teclado|ver\\.? ?\\d*)\\b[)\\]]?\\s*$"), "").trim()
 
     private fun canonical(doc: Document, url: String): String =
