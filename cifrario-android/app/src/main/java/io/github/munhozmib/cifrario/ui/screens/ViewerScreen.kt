@@ -87,6 +87,7 @@ import io.github.munhozmib.cifrario.data.Playlist
 import io.github.munhozmib.cifrario.data.Song
 import io.github.munhozmib.cifrario.music.ChordSheet
 import io.github.munhozmib.cifrario.ui.components.ChordStrip
+import io.github.munhozmib.cifrario.ui.components.OriginalPage
 import io.github.munhozmib.cifrario.ui.components.PlaylistPickerDialog
 import io.github.munhozmib.cifrario.ui.components.SheetText
 import kotlinx.coroutines.isActive
@@ -142,6 +143,10 @@ fun ViewerContent(
     var showDiagrams by remember { mutableStateOf(settings.showChordDiagrams) }
     var picking by remember { mutableStateOf<Pair<List<Playlist>, Set<Long>>?>(null) }
     val focus = remember { FocusRequester() }
+    val pageFile = remember(song.archivePath) { song.archivePath?.takeIf { java.io.File(it).exists() } }
+    var showPage by remember(song.id) { mutableStateOf(pageFile != null && (settings.preferOriginalPage || song.content.isBlank())) }
+    val usePage = showPage && pageFile != null
+    var pageView by remember { mutableStateOf<android.webkit.WebView?>(null) }
 
     val speed = song.scrollSpeed ?: settings.scrollSpeed
     val fontSize = song.fontSize ?: settings.fontSize
@@ -156,27 +161,55 @@ fun ViewerContent(
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
 
     // Rolagem automática: avança a cada quadro, sem bloquear o toque do usuário.
-    LaunchedEffect(playing, speed) {
+    LaunchedEffect(playing, speed, usePage) {
         if (!playing) return@LaunchedEffect
         var last = withFrameNanos { it }
         val pxPerSec = with(density) { speedDpPerSecond(speed).dp.toPx() }
+        var pending = 0f
         while (isActive) {
             val now = withFrameNanos { it }
             val dt = (now - last) / 1_000_000_000f
             last = now
-            if (scroll.maxValue in 1..scroll.value) { playing = false; break }
-            scroll.dispatchRawDelta(pxPerSec * dt)
+            val wv = pageView
+            if (usePage && wv != null) {
+                // WebView só rola em pixels inteiros: acumula as frações.
+                pending += pxPerSec * dt
+                val step = pending.toInt()
+                if (step > 0) { wv.scrollBy(0, step); pending -= step }
+                if (!wv.canScrollVertically(1)) { playing = false; break }
+            } else {
+                if (scroll.maxValue in 1..scroll.value) { playing = false; break }
+                scroll.dispatchRawDelta(pxPerSec * dt)
+            }
         }
     }
 
     fun jump(direction: Int) {
+        val wv = pageView
+        if (usePage && wv != null) {
+            val total = (wv.height * settings.jumpFraction * direction).toInt()
+            scope.launch {
+                // Animação curta (~250 ms) para o olho acompanhar.
+                var done = 0
+                for (i in 1..15) {
+                    withFrameNanos { }
+                    val target = total * i / 15
+                    wv.scrollBy(0, target - done); done = target
+                }
+            }
+            return
+        }
         val amount = scroll.viewportSize * settings.jumpFraction * direction
         scope.launch { scroll.animateScrollBy(amount) }
     }
 
     fun setSpeed(v: Int) = update { it.copy(scrollSpeed = v.coerceIn(1, 20)) }
     fun setFont(v: Float) = update { it.copy(fontSize = v.coerceIn(10f, 36f)) }
-    fun setTranspose(v: Int) = update { it.copy(transpose = Math.floorMod(v + 6, 12) - 6) }
+    fun setTranspose(v: Int) {
+        // A página original não muda de tom: passa para a versão em texto.
+        if (usePage && song.content.isNotBlank()) showPage = false
+        update { it.copy(transpose = Math.floorMod(v + 6, 12) - 6) }
+    }
 
     Box(
         Modifier
@@ -201,7 +234,15 @@ fun ViewerContent(
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val width = maxWidth
             val height = maxHeight
-            Column(
+            if (usePage) {
+                OriginalPage(
+                    path = pageFile!!,
+                    textZoom = (fontSize / 16f * 100).toInt(),
+                    onReady = { pageView = it },
+                    onTap = { controls = !controls },
+                    modifier = Modifier.fillMaxSize().statusBarsPadding().padding(top = if (controls) 64.dp else 0.dp),
+                )
+            } else Column(
                 Modifier
                     .fillMaxSize()
                     .verticalScroll(scroll)
@@ -263,6 +304,10 @@ fun ViewerContent(
                         Box {
                             IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Mais") }
                             DropdownMenu(menu, { menu = false }) {
+                                if (pageFile != null) DropdownMenuItem(
+                                    text = { Text(if (usePage) "Ver em texto (mudar tom, acordes)" else "Ver página original") },
+                                    onClick = { showPage = !showPage; menu = false },
+                                )
                                 DropdownMenuItem(text = { Text(if (showDiagrams) "Ocultar acordes" else "Mostrar acordes") }, onClick = { showDiagrams = !showDiagrams; menu = false })
                                 Instrument.entries.forEach { i ->
                                     DropdownMenuItem(
@@ -295,12 +340,12 @@ fun ViewerContent(
                             IconButton(onClick = { setFont(fontSize - 1) }) { Icon(Icons.Filled.TextDecrease, "Diminuir letra") }
                             Text("${fontSize.toInt()}", style = MaterialTheme.typography.labelLarge)
                             IconButton(onClick = { setFont(fontSize + 1) }) { Icon(Icons.Filled.TextIncrease, "Aumentar letra") }
-                            IconButton(onClick = {
+                            if (!usePage) IconButton(onClick = {
                                 val longest = song.content.lines().maxOfOrNull { it.length }?.coerceAtLeast(20) ?: 40
                                 setFont(((width.value - 40f) / (longest * 0.61f)).coerceIn(10f, 28f))
                             }) { Icon(Icons.Filled.FitScreen, "Ajustar à largura") }
                             Spacer(Modifier.weight(1f))
-                            Text("Toque na cifra para esconder os controles", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(if (usePage) "Página original · menu ⋮ para texto" else "Toque na cifra para esconder os controles", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }

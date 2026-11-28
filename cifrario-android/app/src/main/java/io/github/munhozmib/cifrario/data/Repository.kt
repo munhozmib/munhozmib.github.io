@@ -5,7 +5,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
-class Repository(private val db: AppDatabase) {
+class Repository(private val db: AppDatabase, private val archiveDir: java.io.File? = null) {
     private val songs = db.songs()
     private val playlists = db.playlists()
 
@@ -19,7 +19,17 @@ class Repository(private val db: AppDatabase) {
     suspend fun saveSong(song: Song): Long =
         if (song.id == 0L) songs.insert(song) else { songs.update(song.copy(updatedAt = System.currentTimeMillis())); song.id }
 
-    suspend fun deleteSong(id: Long) = songs.deleteById(id)
+    suspend fun deleteSong(id: Long) {
+        songs.get(id)?.archivePath?.let { java.io.File(it).delete() }
+        songs.deleteById(id)
+    }
+
+    /** Arquivo novo para guardar a cópia offline de uma página. */
+    fun newArchiveFile(): java.io.File {
+        val dir = archiveDir ?: error("sem pasta de páginas")
+        dir.mkdirs()
+        return java.io.File(dir, "pagina-${System.currentTimeMillis()}.mht")
+    }
 
     fun playlistsWithCount() = playlists.observeWithCount()
     fun playlist(id: Long) = playlists.observe(id)

@@ -24,6 +24,8 @@ data class AppSettings(
     val theme: ThemeMode = ThemeMode.SYSTEM,
     val defaultInstrument: Instrument = Instrument.VIOLAO,
     val showChordDiagrams: Boolean = true,
+    /** Abrir a página original salva (true) ou a versão em texto (false). */
+    val preferOriginalPage: Boolean = true,
 )
 
 private val Context.dataStore by preferencesDataStore("settings")
@@ -38,6 +40,7 @@ class SettingsRepository(private val context: Context) {
         val theme = stringPreferencesKey("theme")
         val instrument = stringPreferencesKey("instrument")
         val diagrams = booleanPreferencesKey("diagrams")
+        val page = booleanPreferencesKey("page")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p -> p.toSettings() }
@@ -53,6 +56,7 @@ class SettingsRepository(private val context: Context) {
             theme = this[K.theme]?.let { runCatching { ThemeMode.valueOf(it) }.getOrNull() } ?: d.theme,
             defaultInstrument = this[K.instrument]?.let { runCatching { Instrument.valueOf(it) }.getOrNull() } ?: d.defaultInstrument,
             showChordDiagrams = this[K.diagrams] ?: d.showChordDiagrams,
+            preferOriginalPage = this[K.page] ?: d.preferOriginalPage,
         )
     }
 
@@ -67,6 +71,7 @@ class SettingsRepository(private val context: Context) {
             p[K.theme] = n.theme.name
             p[K.instrument] = n.defaultInstrument.name
             p[K.diagrams] = n.showChordDiagrams
+            p[K.page] = n.preferOriginalPage
         }
     }
 }

@@ -36,15 +36,16 @@ object SnapshotParser {
     var x = t(e);
     if (x && x.split('\n').length >= 4 && seen.indexOf(x) < 0) { seen.push(x); c.push(x); }
   });
-  c.sort(function(a,b){ return a.length - b.length; });
-  if (c.length > 15) c = c.slice(0, 15);
+  // Maiores primeiro: a cifra completa costuma ser o maior bloco de texto pré-formatado.
+  c.sort(function(a,b){ return b.length - a.length; });
+  if (c.length > 40) c = c.slice(0, 40);
   var ug = document.querySelector('.js-store');
   var keyEl = document.querySelector('#cifra_tom, [id*="tom"], [class*="cifra_tom"], [class*="key"]');
   return JSON.stringify({
     url: location.href, title: document.title, ogTitle: meta('meta[property="og:title"]'),
     h1: t(document.querySelector('h1')).trim().slice(0,200), h2: t(document.querySelector('h2')).trim().slice(0,200),
     key: t(keyEl).trim().slice(0,60), ug: ug ? ug.getAttribute('data-content') : null,
-    candidates: c.map(function(x){ return x.slice(0, 30000); }), body: t(document.body).slice(0, 300000)
+    candidates: c.map(function(x){ return x.slice(0, 80000); }), body: t(document.body).slice(0, 300000)
   });
 })()
 """
@@ -60,11 +61,11 @@ object SnapshotParser {
             ?: throw ParseException("Não encontrei acordes nesta página. Abra a página da música (não a lista de resultados).")
 
         val h1 = ChordPageParser.stripKind(s.h1.lineSequence().firstOrNull().orEmpty().trim())
-        val h2 = s.h2.lineSequence().firstOrNull().orEmpty().trim()
-        val useHeadings = h1.isNotBlank() && h1.length < 80 && site == Site.CIFRA_CLUB && h2.isNotBlank() && h2.length < 80
         return ParsedSong(
-            title = if (useHeadings) h1 else meta.first.ifBlank { h1.ifBlank { "Sem título" } },
-            artist = if (useHeadings) h2 else meta.second,
+            // O <title> da página ("Música - Artista - Site") é mais confiável que os cabeçalhos,
+            // que às vezes são do menu do site.
+            title = meta.first.takeIf { it.isNotBlank() && it != "Sem título" } ?: h1.ifBlank { "Sem título" },
+            artist = meta.second,
             content = content,
             key = Regex("(?i)(?:tom|key)\\s*:?\\s*([A-G][#b]?m?)\\b").find(s.key)?.groupValues?.get(1),
             site = site,

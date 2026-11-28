@@ -81,3 +81,32 @@ class RepositoryTest {
         other.close()
     }
 }
+
+@RunWith(RobolectricTestRunner::class)
+class MigrationTest {
+    @Test fun migratesV1ToV2KeepingSongs() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        val name = "migracao.db"
+        ctx.deleteDatabase(name)
+        // Banco no formato da versão 1 (sem archivePath).
+        android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(ctx.getDatabasePath(name), null).use { db ->
+            db.execSQL("CREATE TABLE songs (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, title TEXT NOT NULL, artist TEXT NOT NULL, content TEXT NOT NULL, sourceSite TEXT, sourceUrl TEXT, originalKey TEXT, instrument TEXT, transpose INTEGER NOT NULL, capo INTEGER NOT NULL, scrollSpeed INTEGER, fontSize REAL, notes TEXT, favorite INTEGER NOT NULL, createdAt INTEGER NOT NULL, updatedAt INTEGER NOT NULL)")
+            db.execSQL("CREATE INDEX index_songs_sourceUrl ON songs (sourceUrl)")
+            db.execSQL("CREATE TABLE playlists (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, instrument TEXT NOT NULL, position INTEGER NOT NULL, createdAt INTEGER NOT NULL)")
+            db.execSQL("CREATE TABLE playlist_entries (entryId INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, playlistId INTEGER NOT NULL, songId INTEGER NOT NULL, position INTEGER NOT NULL, FOREIGN KEY(playlistId) REFERENCES playlists(id) ON UPDATE NO ACTION ON DELETE CASCADE, FOREIGN KEY(songId) REFERENCES songs(id) ON UPDATE NO ACTION ON DELETE CASCADE)")
+            db.execSQL("CREATE INDEX index_playlist_entries_playlistId ON playlist_entries (playlistId)")
+            db.execSQL("CREATE INDEX index_playlist_entries_songId ON playlist_entries (songId)")
+            db.execSQL("INSERT INTO songs (title, artist, content, transpose, capo, favorite, createdAt, updatedAt) VALUES ('Velha', 'X', 'C G', 2, 0, 0, 1, 1)")
+            db.version = 1
+        }
+        val db = androidx.room.Room.databaseBuilder(ctx, AppDatabase::class.java, name)
+            .addMigrations(AppDatabase.MIGRATION_1_2).allowMainThreadQueries().build()
+        kotlinx.coroutines.runBlocking {
+            val s = db.songs().all().single()
+            assertEquals("Velha", s.title)
+            assertEquals(2, s.transpose)
+            assertEquals(null, s.archivePath)
+        }
+        db.close()
+    }
+}

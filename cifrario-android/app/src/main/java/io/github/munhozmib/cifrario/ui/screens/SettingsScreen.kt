@@ -98,6 +98,7 @@ fun SettingsScreen(back: () -> Unit) {
             LabeledSlider("Rolagem rápida desce ${(settings.jumpFraction * 100).roundToInt()}% da tela", settings.jumpFraction, 0.25f..1f, 14) { v ->
                 set { it.copy(jumpFraction = (v * 20).roundToInt() / 20f) }
             }
+            Toggle("Abrir a página original salva (como no site)", settings.preferOriginalPage) { v -> set { it.copy(preferOriginalPage = v) } }
             Toggle("Manter a tela ligada na cifra", settings.keepScreenOn) { v -> set { it.copy(keepScreenOn = v) } }
             Toggle("Botões de volume rolam a cifra", settings.volumeKeysScroll) { v -> set { it.copy(volumeKeysScroll = v) } }
             Toggle("Mostrar diagramas dos acordes", settings.showChordDiagrams) { v -> set { it.copy(showChordDiagrams = v) } }

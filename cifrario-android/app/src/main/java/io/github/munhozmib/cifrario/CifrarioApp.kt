@@ -8,7 +8,7 @@ import io.github.munhozmib.cifrario.data.SettingsRepository
 import io.github.munhozmib.cifrario.importer.CifraClubSearch
 
 class AppContainer(context: Context, db: AppDatabase = AppDatabase.build(context)) {
-    val repository = Repository(db)
+    val repository = Repository(db, java.io.File(context.filesDir, "paginas"))
     val settings = SettingsRepository(context)
     val cifraClubSearch = CifraClubSearch()
 }

@@ -80,4 +80,19 @@ class SnapshotParserTest {
         assertFalse(block.contains("Eb  E  F"))
         assertTrue(block.startsWith("[Intro]"))
     }
+
+    /** Caso real: a página tem a cifra inteira e, separado, um bloco só com a tablatura do solo. */
+    @Test fun fullSheetBeatsTabPart() {
+        val tab = "     F                    Dm  C  C7\nE|-1/13------------|\nB|-1/13--8h10-8----|\nG|-------------10--|\n\n     F\nE|------|\nParte 2 de 3"
+        val full = sheet + "\n\n[Solo]\n" + tab + "\n\n[Refrão]\nF          Dm\n  Mais uma linha\nC          C7\n  Última linha"
+        val p = SnapshotParser.parse(PageSnapshot(
+            url = "https://www.cifraclub.com.br/harry-styles/sign-of-the-times/",
+            title = "Sign Of The Times - Harry Styles - Cifra Club", h1 = "Sign Of The Times", h2 = "Menu principal",
+            candidates = listOf(full, tab).sortedByDescending { it.length }, body = body,
+        ))
+        assertTrue(p.content.startsWith("[Intro] G  D  Em  C"))
+        assertTrue(p.content.endsWith("Última linha"))
+        assertEquals("Sign Of The Times", p.title)
+        assertEquals("Harry Styles", p.artist)
+    }
 }

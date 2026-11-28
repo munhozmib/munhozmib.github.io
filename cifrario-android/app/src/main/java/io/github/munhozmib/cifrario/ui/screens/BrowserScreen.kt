@@ -99,6 +99,24 @@ fun BrowserScreen(startUrl: String, back: () -> Unit, openSong: (Long) -> Unit, 
 
     var failure by remember { mutableStateOf<Pair<String, PageSnapshot?>?>(null) }
 
+    /** Salva cifra (texto) + cópia da página. Retorna o id da música. */
+    suspend fun store(p: ParsedSong, playlistIds: Set<Long>, replacing: Song?): Long {
+        val archive = runCatching { saveArchive(webView, repo.newArchiveFile()) }.getOrNull()
+        replacing?.archivePath?.takeIf { archive != null }?.let { java.io.File(it).delete() }
+        val base = replacing ?: Song(title = "", artist = "", content = "")
+        val id = repo.saveSong(
+            base.copy(
+                title = p.title.trim().ifBlank { "Sem título" }, artist = p.artist.trim(), content = p.content,
+                originalKey = p.key?.trim()?.ifBlank { null } ?: ChordSheet.guessKey(p.content),
+                sourceSite = p.site?.label, sourceUrl = p.url,
+                archivePath = archive ?: base.archivePath,
+                transpose = if (replacing != null) base.transpose else 0,
+            )
+        )
+        playlistIds.forEach { pid -> if (pid !in repo.playlistsOf(id)) repo.addToPlaylist(pid, id) }
+        return id
+    }
+
     fun extract() {
         val wv = webView ?: return
         extracting = true
@@ -174,8 +192,12 @@ fun BrowserScreen(startUrl: String, back: () -> Unit, openSong: (Long) -> Unit, 
                             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                                 if (!request.isForMainFrame) return false
                                 val url = request.url.toString()
-                                if (Site.isAllowedNavigation(url)) return false
-                                Toast.makeText(ctx, "Link fora dos sites de cifras — bloqueado", Toast.LENGTH_SHORT).show()
+                                if (url.startsWith("http://") || url.startsWith("https://")) return false
+                                // Links "abrir no app" (intent://) trazem um endereço alternativo para o navegador.
+                                val fallback = Regex("browser_fallback_url=([^;]+)").find(url)?.groupValues?.get(1)
+                                    ?.let { java.net.URLDecoder.decode(it, "UTF-8") }
+                                if (fallback != null && fallback.startsWith("http")) view.loadUrl(fallback)
+                                else Toast.makeText(ctx, "Esse link abre outro aplicativo — continue pelo site.", Toast.LENGTH_SHORT).show()
                                 return true
                             }
                             override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
@@ -208,23 +230,34 @@ fun BrowserScreen(startUrl: String, back: () -> Unit, openSong: (Long) -> Unit, 
             title = { Text("Não reconheci a cifra") },
             text = {
                 Text(
-                    "$msg\n\nVocê pode abrir o texto da página no editor, apagar o que não for cifra e salvar." +
+                    "$msg\n\nVocê pode salvar a página do jeito que está (abre offline igualzinho), ou abrir o texto no editor." +
                         "\n\nSe acontecer sempre neste site, me avise qual música era para eu ajustar o leitor."
                 )
             },
             confirmButton = {
-                if (snap != null) TextButton(onClick = {
-                    failure = null
-                    val site = Site.fromUrl(snap.url)
-                    val (t, a) = ChordPageParser.splitTitle(snap.ogTitle.ifBlank { snap.title })
-                    Drafts.pending = Song(
-                        title = t, artist = a, sourceSite = site?.label, sourceUrl = snap.url.substringBefore('#'),
-                        content = ChordPageParser.clean(
-                            SnapshotParser.trimToSheet(ChordPageParser.clean(snap.body)) ?: snap.body.take(20000)
-                        ),
-                    )
-                    openDraft()
-                }) { Text("Abrir no editor") }
+                if (snap != null) Column(horizontalAlignment = Alignment.End) {
+                    TextButton(onClick = {
+                        failure = null
+                        val (t, a) = ChordPageParser.splitTitle(snap.ogTitle.ifBlank { snap.title })
+                        scope.launch {
+                            val id = store(ParsedSong(t, a, "", null, Site.fromUrl(snap.url), snap.url.substringBefore('#')), emptySet(), null)
+                            val r = snackbar.showSnackbar("Página salva offline", actionLabel = "Abrir", duration = SnackbarDuration.Short)
+                            if (r == SnackbarResult.ActionPerformed) openSong(id)
+                        }
+                    }) { Text("Salvar a página assim mesmo") }
+                    TextButton(onClick = {
+                        failure = null
+                        val site = Site.fromUrl(snap.url)
+                        val (t, a) = ChordPageParser.splitTitle(snap.ogTitle.ifBlank { snap.title })
+                        Drafts.pending = Song(
+                            title = t, artist = a, sourceSite = site?.label, sourceUrl = snap.url.substringBefore('#'),
+                            content = ChordPageParser.clean(
+                                SnapshotParser.trimToSheet(ChordPageParser.clean(snap.body)) ?: snap.body.take(20000)
+                            ),
+                        )
+                        openDraft()
+                    }) { Text("Abrir o texto no editor") }
+                }
             },
             dismissButton = { TextButton(onClick = { failure = null }) { Text("Fechar") } },
         )
@@ -237,16 +270,7 @@ fun BrowserScreen(startUrl: String, back: () -> Unit, openSong: (Long) -> Unit, 
             onSave = { title, artist, key, selected, replace ->
                 preview = null
                 scope.launch {
-                    val base = if (replace && existing != null) existing!! else Song(title = "", artist = "", content = "")
-                    val id = repo.saveSong(
-                        base.copy(
-                            title = title.trim().ifBlank { "Sem título" }, artist = artist.trim(), content = p.content,
-                            originalKey = key.trim().ifBlank { null } ?: ChordSheet.guessKey(p.content),
-                            sourceSite = p.site?.label, sourceUrl = p.url,
-                            transpose = if (replace) base.transpose else 0,
-                        )
-                    )
-                    selected.forEach { pid -> if (pid !in repo.playlistsOf(id)) repo.addToPlaylist(pid, id) }
+                    val id = store(p.copy(title = title, artist = artist, key = key), selected, if (replace) existing else null)
                     val r = snackbar.showSnackbar("\"${title.trim()}\" salva offline", actionLabel = "Abrir", duration = SnackbarDuration.Short)
                     if (r == SnackbarResult.ActionPerformed) openSong(id)
                 }
@@ -254,6 +278,12 @@ fun BrowserScreen(startUrl: String, back: () -> Unit, openSong: (Long) -> Unit, 
         )
     }
 }
+
+/** Grava a página atual como arquivo MHTML (cópia fiel, abre sem internet). */
+private suspend fun saveArchive(webView: WebView?, file: java.io.File): String? =
+    if (webView == null) null else kotlinx.coroutines.suspendCancellableCoroutine { cont ->
+        webView.saveWebArchive(file.absolutePath, false) { path -> if (cont.isActive) cont.resume(path) {} }
+    }
 
 @Composable
 private fun SavePreviewDialog(

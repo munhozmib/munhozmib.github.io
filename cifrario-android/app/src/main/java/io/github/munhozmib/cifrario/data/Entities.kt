@@ -28,6 +28,8 @@ data class Song(
     val fontSize: Float? = null,
     val notes: String? = null,
     val favorite: Boolean = false,
+    /** Cópia da página original (MHTML) salva no aparelho, para ver exatamente como no site. */
+    val archivePath: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val updatedAt: Long = System.currentTimeMillis(),
 )
